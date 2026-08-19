@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""163 邮箱新邮件检测脚本：通过 IMAP 检测新邮件，通过 PushPlus 推送到微信。
+"""163 邮箱新邮件检测脚本：通过 IMAP 检测新邮件，通过 Server酱 推送到微信。
 
 环境变量：
   MAIL_USER       163 邮箱账号（如 xxx@163.com）
   MAIL_PASS       163 邮箱 IMAP 授权码（不是登录密码）
-  PUSHPLUS_TOKEN  PushPlus 一对一推送 token
-  PUSHPLUS_TOPIC  可选，PushPlus 群组编码，不填则一对一推送
+  SEND_KEY        Server酱 SendKey（以 SCT 开头）
   MAX_NOTIFY      可选，单次最多通知的邮件数，默认 5
 """
 
@@ -24,8 +23,7 @@ MAIL_HOST = os.environ.get("MAIL_HOST", "imap.163.com")
 MAIL_PORT = int(os.environ.get("MAIL_PORT", "993"))
 MAIL_USER = os.environ["MAIL_USER"]
 MAIL_PASS = os.environ["MAIL_PASS"]
-PUSHPLUS_TOKEN = os.environ["PUSHPLUS_TOKEN"]
-PUSHPLUS_TOPIC = os.environ.get("PUSHPLUS_TOPIC", "")
+SEND_KEY = os.environ["SEND_KEY"]
 MAX_NOTIFY = int(os.environ.get("MAX_NOTIFY", "5"))
 
 STATE_FILE = Path(__file__).parent / "state.json"
@@ -41,24 +39,18 @@ def decode_header_text(raw: str) -> str:
         return raw.strip()
 
 
-def pushplus_send(title: str, content: str) -> None:
-    """调用 PushPlus API 推送到微信。"""
+def serverchan_send(title: str, content: str) -> None:
+    """调用 Server酱 Turbo API 推送到微信。"""
     data = urllib.parse.urlencode(
-        {
-            "token": PUSHPLUS_TOKEN,
-            "title": title,
-            "content": content,
-            "template": "txt",
-            "topic": PUSHPLUS_TOPIC,
-        }
+        {"title": title, "desp": content}
     ).encode("utf-8")
     req = urllib.request.Request(
-        "https://www.pushplus.plus/send", data=data, method="POST"
+        f"https://sctapi.ftqq.com/{SEND_KEY}.send", data=data, method="POST"
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         result = json.loads(resp.read().decode("utf-8"))
-    if result.get("code") != 200:
-        raise RuntimeError(f"PushPlus 推送失败: {result.get('msg')}")
+    if result.get("code") != 0:
+        raise RuntimeError(f"Server酱 推送失败: {result.get('message')}")
 
 
 def load_state() -> dict:
@@ -74,12 +66,34 @@ def save_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state), "utf-8")
 
 
+def send_imap_id(mail) -> None:
+    """发送 IMAP ID 命令（RFC 2971），声明客户端身份。
+
+    163 邮箱要求客户端在连接后表明身份，否则 SELECT 会被拒绝并返回
+    "SELECT Unsafe Login" 错误。imaplib 不支持原生 ID 命令，因此手动发送。
+    """
+    tag = mail._new_tag().decode()
+    id_payload = '("name" "MailChecker" "version" "1.0" "vendor" "github" "support-email" "{}")'.format(
+        MAIL_USER
+    )
+    mail.send(f"{tag} ID {id_payload}\r\n".encode())
+    while True:
+        line = mail.readline()
+        if not line:
+            raise RuntimeError("IMAP ID 命令无响应")
+        if tag.encode() in line:
+            if b"OK" in line:
+                return
+            raise RuntimeError(f"IMAP ID 命令失败: {line.decode().strip()}")
+
+
 def main() -> int:
     state = load_state()
 
     mail = imaplib.IMAP4_SSL(MAIL_HOST, MAIL_PORT)
     try:
         mail.login(MAIL_USER, MAIL_PASS)
+        send_imap_id(mail)
 
         # 在 select 之前获取 UIDVALIDITY（status 命令会使连接退回 AUTH 状态，
         # 因此必须在 select 之前调用，否则后续 search/fetch 会失败）
@@ -140,7 +154,7 @@ def main() -> int:
         content = "\n\n".join(lines)
 
         title = f"163邮箱收到 {len(new_mails)} 封新邮件"
-        pushplus_send(title, content)
+        serverchan_send(title, content)
         print(f"[push] 已推送 {len(new_mails)} 封新邮件")
 
         # 更新状态

@@ -4,7 +4,7 @@
 
 - **GitHub Actions**（免费托管运行器）每 5 分钟检测一次 163 邮箱
 - 通过 **IMAP** 协议读取新邮件（只检测，不修改邮件状态）
-- 发现新邮件通过 **PushPlus** 推送到微信
+- 发现新邮件通过 **Server酱** 推送到微信
 
 ## 架构
 
@@ -12,14 +12,14 @@
 GitHub Actions 定时任务（每5分钟，免费）
     ↓ IMAP 连接 imap.163.com:993
 检测到新邮件
-    ↓ PushPlus API
+    ↓ Server酱 API
 个人微信收到通知
 ```
 
 ## 使用前提
 
 1. **163 邮箱开通 IMAP**：登录网页版邮箱 → 设置 → POP3/SMTP/IMAP → 开启 IMAP 服务，获取**授权码**（不是登录密码）
-2. **注册 PushPlus**（https://www.pushplus.plus）：微信扫码登录 → 获取一对一推送 Token
+2. **注册 Server酱**（https://sct.ftqq.com）：微信扫码登录并关注公众号，获取 SendKey（以 `SCT` 开头）
 
 ## 配置 Secrets
 
@@ -29,8 +29,7 @@ GitHub Actions 定时任务（每5分钟，免费）
 |---|---|
 | `MAIL_USER` | 你的 163 邮箱账号，如 `xxx@163.com` |
 | `MAIL_PASS` | 163 邮箱 IMAP 授权码 |
-| `PUSHPLUS_TOKEN` | PushPlus 一对一推送 Token |
-| `PUSHPLUS_TOPIC` | （可选）PushPlus 群组编码，不填则一对一推送 |
+| `SEND_KEY` | Server酱 SendKey（以 `SCT` 开头） |
 
 ## 说明
 
@@ -42,4 +41,4 @@ GitHub Actions 定时任务（每5分钟，免费）
 ## 免费额度
 
 - GitHub Actions：公共仓库免费无限时长
-- PushPlus：免费每天 200 条推送
+- Server酱：免费每天 5 条推送
