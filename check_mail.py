@@ -80,19 +80,23 @@ def main() -> int:
     mail = imaplib.IMAP4_SSL(MAIL_HOST, MAIL_PORT)
     try:
         mail.login(MAIL_USER, MAIL_PASS)
-        mail.select("INBOX")
 
-        # 获取 UIDVALIDITY，防止邮箱重建后 UID 复用
+        # 在 select 之前获取 UIDVALIDITY（status 命令会使连接退回 AUTH 状态，
+        # 因此必须在 select 之前调用，否则后续 search/fetch 会失败）
         typ, status = mail.status("INBOX", "(UIDVALIDITY)")
         if typ != "OK":
             raise RuntimeError("获取 UIDVALIDITY 失败")
-        uidvalidity = int(email.message_from_string(status[0].decode()).get("UIDVALIDITY", 0))
+        # status 返回形如 b'"INBOX" (UIDVALIDITY 1)'，用正则提取
+        import re
+        uidvalidity_match = re.search(r"UIDVALIDITY (\d+)", status[0].decode())
+        uidvalidity = int(uidvalidity_match.group(1)) if uidvalidity_match else 0
 
         if state["uidvalidity"] != uidvalidity:
             # 邮箱重建，重置状态
             state = {"uidvalidity": uidvalidity, "max_uid": 0}
             print(f"[state] UIDVALIDITY 变化，重置为 {uidvalidity}")
 
+        mail.select("INBOX")
         typ, data = mail.uid("search", None, "ALL")
         if typ != "OK":
             raise RuntimeError("搜索邮件失败")
