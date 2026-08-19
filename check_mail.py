@@ -126,7 +126,8 @@ def main() -> int:
             print(f"[init] 初始化完成，当前最大 UID={state['max_uid']}")
             return 0
 
-        new_uids = [u for u in all_uids if u > state["max_uid"]][-MAX_NOTIFY:]
+        # 按旧到新逐批处理；不要取最后一批后直接跳过前面的邮件。
+        new_uids = [u for u in all_uids if u > state["max_uid"]][:MAX_NOTIFY]
         if not new_uids:
             print("[info] 无新邮件")
             return 0
